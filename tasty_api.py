@@ -232,28 +232,40 @@ class TastyTradeAPI:
         # Get the initial cash balance
         initial_balance = self.get_account_balance()
         if not initial_balance:
+            logger.error(f'Failed to get initial balance for {symbol} price check')
             return None
             
         initial_cash = float(initial_balance['cash-available-to-withdraw'])
+        logger.info(f'Initial cash balance: {initial_cash}')
         
         # Buy 1 share of the stock
+        logger.info(f'Buying 1 share of {symbol} to determine price')
         order_result = self.place_order(symbol, 1, 'Buy to Open')
         if not order_result:
+            logger.error(f'Failed to place order for {symbol} price check')
             return None
             
-        # Wait for the order to fill
-        time.sleep(1)
+        # Wait for the order to fill - INCREASED WAIT TIME
+        logger.info(f'Waiting for order to fill and balance to update')
+        time.sleep(10)  # Increased from 1 to 10 seconds to allow for balance update
         
         # Get the new cash balance
         new_balance = self.get_account_balance()
         if not new_balance:
+            logger.error(f'Failed to get updated balance after {symbol} purchase')
             return None
             
         new_cash = float(new_balance['cash-available-to-withdraw'])
+        logger.info(f'New cash balance: {new_cash}')
         
         # Calculate the price (difference in cash balance)
         price = initial_cash - new_cash
         
+        if price <= 0:
+            logger.error(f'Invalid price calculation for {symbol}: {price}')
+            logger.error(f'Initial cash: {initial_cash}, New cash: {new_cash}')
+            return None
+            
         logger.info(f'Calculated price of {symbol}: {price}')
         
         return price
