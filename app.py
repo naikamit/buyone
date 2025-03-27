@@ -11,12 +11,12 @@ import sys
 from tasty_api import TastyTradeAPI
 from trading import TradingLogic
 
-# Configure logging
+# Configure logging - use more verbose DEBUG level
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # More detailed logging level
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(stream=sys.stdout),  # Explicitly log to stdout for Render logs
         logging.FileHandler('app.log')
     ]
 )
@@ -40,6 +40,24 @@ trading_logic = TradingLogic(tasty_api)
 
 # Store API calls for dashboard display
 api_calls = []
+
+@app.before_first_request
+def initialize_app():
+    """Initialize the app by logging in to Tasty Trade API"""
+    logger.info("Initializing the application on first request")
+    
+    # Log environment details (without exposing credentials)
+    logger.info(f"Username: {os.environ.get('TASTYTRADE_USERNAME', 'Not set')}")
+    logger.info(f"Password: {'Set' if os.environ.get('TASTYTRADE_PASSWORD') else 'Not set'}")
+    logger.info(f"Environment: {os.environ.get('ENVIRONMENT', 'Not set')}")
+    logger.info(f"Account Number: {os.environ.get('ACCOUNT_NUMBER', 'Not set')}")
+    
+    # Test the authentication
+    login_success = tasty_api.login()
+    if login_success:
+        logger.info("Successfully authenticated with Tasty Trade API on startup")
+    else:
+        logger.error("Failed to authenticate with Tasty Trade API on startup")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -114,9 +132,9 @@ def dashboard():
     return render_template('dashboard.html', api_calls=all_api_calls)
 
 if __name__ == '__main__':
-    # Login to Tasty Trade API on startup
+    # Login manually in development only
     tasty_api.login()
     
     # Start the server
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)
