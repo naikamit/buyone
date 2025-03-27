@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 import pytz
 import traceback
+import sys
 
 from tasty_api import TastyTradeAPI
 from trading import TradingLogic
