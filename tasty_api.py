@@ -65,28 +65,78 @@ class TastyTradeAPI:
         method = 'POST'
         data = {
             'login': self.username,
-            'password': self.password
+            'password': self.password,
+            'remember-me': True  # Add remember-me flag to potentially help with authentication
         }
         
+        user_agent = 'TastyTradeWebhook/1.0'
+        
         try:
+            # Log the exact authentication request and URL
+            logger.info(f"Attempting to authenticate with {self.base_url}{endpoint}")
+            logger.info(f"Username: {self.username}, Environment: {self.environment}")
+            
             response = requests.post(
                 f'{self.base_url}{endpoint}',
                 json=data,
-                headers={'Content-Type': 'application/json'}
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'User-Agent': user_agent
+                }
             )
+            
+            # Log detailed response information
+            status_code = response.status_code
+            response_text = response.text
+            logger.info(f"Auth response status code: {status_code}")
+            logger.info(f"Auth response text: {response_text}")
+            
+            # Try to parse JSON response if possible
+            try:
+                response_data = response.json()
+                logger.info(f"Auth response JSON: {json.dumps(response_data, indent=2)}")
+                
+                if 'data' in response_data and 'session-token' in response_data['data']:
+                    self.session_token = response_data['data']['session-token']
+                    logger.info('Successfully authenticated with Tasty Trade API')
+                    self._log_api_call(method, endpoint, data, response_data, status_code)
+                    return True
+                else:
+                    error_msg = "Session token not found in response"
+                    if 'error' in response_data:
+                        error_msg = f"API error: {response_data['error']}"
+                    logger.error(error_msg)
+                    self._log_api_call(method, endpoint, data, response_data, status_code, error_msg)
+                    return False
+                    
+            except json.JSONDecodeError:
+                error_msg = f"Failed to parse response as JSON: {response_text}"
+                logger.error(error_msg)
+                self._log_api_call(method, endpoint, data, {"raw_text": response_text}, status_code, error_msg)
+                return False
+                
+            # This is needed in case the response status is non-200 but it didn't raise an exception
             response.raise_for_status()
-            response_data = response.json()
             
-            # Extract session token
-            self.session_token = response_data['data']['session-token']
-            
-            logger.info('Successfully authenticated with Tasty Trade API')
-            self._log_api_call(method, endpoint, data, response_data, response.status_code)
-            
-            return True
+        except requests.exceptions.RequestException as e:
+            # Handle specific request exceptions
+            error_msg = f"Request exception: {str(e)}"
+            logger.error(error_msg)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_response = e.response.json()
+                    logger.error(f"Error response: {json.dumps(error_response, indent=2)}")
+                except:
+                    logger.error(f"Error response text: {e.response.text}")
+            self._log_api_call(method, endpoint, data, None, getattr(e, 'response', None), error_msg)
+            return False
         except Exception as e:
-            logger.error(f'Error authenticating with Tasty Trade API: {str(e)}')
-            self._log_api_call(method, endpoint, data, None, None, str(e))
+            # Handle all other exceptions
+            error_msg = f"Unexpected error authenticating with Tasty Trade API: {str(e)}"
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
+            self._log_api_call(method, endpoint, data, None, None, error_msg)
             return False
     
     def get_account_balance(self):
