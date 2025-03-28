@@ -217,7 +217,7 @@ class TastyTradeAPI:
     
     def get_stock_price(self, symbol):
         """
-        Get the price of a stock by buying 1 share and checking the difference in cash balance
+        Get the current price for a stock
         
         Args:
             symbol: Stock symbol
@@ -229,46 +229,48 @@ class TastyTradeAPI:
             logger.error('Not authenticated')
             return None
             
-        # Get the initial cash balance
-        initial_balance = self.get_account_balance()
-        if not initial_balance:
-            logger.error(f'Failed to get initial balance for {symbol} price check')
-            return None
+        endpoint = f'/market-data/quotes/{symbol}'
+        method = 'GET'
+        
+        try:
+            response = requests.get(
+                f'{self.base_url}{endpoint}',
+                headers={
+                    'Authorization': self.session_token,
+                    'Content-Type': 'application/json'
+                }
+            )
+            response.raise_for_status()
+            response_data = response.json()
             
-        initial_cash = float(initial_balance['cash-available-to-withdraw'])
-        logger.info(f'Initial cash balance: {initial_cash}')
-        
-        # Buy 1 share of the stock
-        logger.info(f'Buying 1 share of {symbol} to determine price')
-        order_result = self.place_order(symbol, 1, 'Buy to Open')
-        if not order_result:
-            logger.error(f'Failed to place order for {symbol} price check')
-            return None
+            logger.info(f'Successfully retrieved quote for {symbol}')
+            self._log_api_call(method, endpoint, None, response_data, response.status_code)
             
-        # Wait for the order to fill - INCREASED WAIT TIME
-        logger.info(f'Waiting for order to fill and balance to update')
-        time.sleep(10)  # Increased from 1 to 10 seconds to allow for balance update
-        
-        # Get the new cash balance
-        new_balance = self.get_account_balance()
-        if not new_balance:
-            logger.error(f'Failed to get updated balance after {symbol} purchase')
+            # Get the mid-price or last price
+            if 'data' in response_data:
+                quote_data = response_data['data']['items'][0]
+                # Try to get mid price first (average of bid and ask)
+                if 'bid' in quote_data and 'ask' in quote_data:
+                    bid = float(quote_data['bid'])
+                    ask = float(quote_data['ask'])
+                    price = (bid + ask) / 2
+                # Fall back to last price if available
+                elif 'last' in quote_data:
+                    price = float(quote_data['last'])
+                else:
+                    logger.error(f'Could not determine price for {symbol} from quote data')
+                    return None
+                
+                logger.info(f'Price for {symbol}: {price}')
+                return price
+            else:
+                logger.error(f'Invalid response format for {symbol} quote')
+                return None
+                
+        except Exception as e:
+            logger.error(f'Error getting stock price for {symbol}: {str(e)}')
+            self._log_api_call(method, endpoint, None, None, None, str(e))
             return None
-            
-        new_cash = float(new_balance['cash-available-to-withdraw'])
-        logger.info(f'New cash balance: {new_cash}')
-        
-        # Calculate the price (difference in cash balance)
-        price = initial_cash - new_cash
-        
-        if price <= 0:
-            logger.error(f'Invalid price calculation for {symbol}: {price}')
-            logger.error(f'Initial cash: {initial_cash}, New cash: {new_cash}')
-            return None
-            
-        logger.info(f'Calculated price of {symbol}: {price}')
-        
-        return price
     
     def place_order(self, symbol, quantity, action):
         """
