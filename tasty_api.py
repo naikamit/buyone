@@ -345,3 +345,4 @@ class TastyTradeAPI:
         action = 'Sell to Close' if direction == 'Long' else 'Buy to Close'
         
         return self.place_order(symbol, quantity, action)
+        
