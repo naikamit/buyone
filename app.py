@@ -61,26 +61,26 @@ trading_logic = TradingLogic(tasty_api) if tasty_api is not None else None
 # Store API calls for dashboard display
 api_calls = []
 
-@app.before_first_request
-def initialize_app():
-    """Initialize the app by logging in to Tasty Trade API"""
-    logger.info("Initializing the application on first request")
-    
-    # Log environment details (without exposing credentials)
-    logger.info(f"Username: {username or 'Not set'}")
-    logger.info(f"Password: {'Set' if password else 'Not set'}")
-    logger.info(f"Environment: {environment}")
-    logger.info(f"Account Number: {account_number or 'Not set'}")
-    
-    # Test the authentication if API client is available
-    if tasty_api is not None:
+@app.before_request
+def initialize_app_if_needed():
+    """Initialize the app by logging in to Tasty Trade API if not already authenticated"""
+    if tasty_api is not None and not tasty_api.session_token:
+        logger.info("App not initialized, authenticating with Tasty Trade API")
+        
+        # Log environment details (without exposing credentials)
+        logger.info(f"Username: {username or 'Not set'}")
+        logger.info(f"Password: {'Set' if password else 'Not set'}")
+        logger.info(f"Environment: {environment}")
+        logger.info(f"Account Number: {account_number or 'Not set'}")
+        
+        # Test the authentication
         login_success = tasty_api.login()
         if login_success:
-            logger.info("Successfully authenticated with Tasty Trade API on startup")
+            logger.info("Successfully authenticated with Tasty Trade API")
         else:
-            logger.error("Failed to authenticate with Tasty Trade API on startup")
+            logger.error("Failed to authenticate with Tasty Trade API")
     else:
-        logger.error("Cannot authenticate - TastyTradeAPI client not initialized")
+        logger.debug("App already initialized or TastyTradeAPI not available")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -175,10 +175,6 @@ def dashboard():
     return render_template('dashboard.html', api_calls=all_api_calls, env_info=env_info)
 
 if __name__ == '__main__':
-    # Login manually in development only
-    if tasty_api is not None:
-        tasty_api.login()
-    
     # Start the server
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
